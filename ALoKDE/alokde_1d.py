@@ -66,7 +66,6 @@ class ALoKDE():
         # Custom
         self._weight_threshold: float = 0.01
 
-
     def pdf(self, x: float) -> float:
         """
         Computes the value of the ALoKDE estimator in the given point.
@@ -162,10 +161,7 @@ class ALoKDE():
 
         h_d: float = c * np.std(self._samples[-1][:self._m_t]) * pow(self._m_t, -0.2)
 
-        print(f"c={c}\n"
-              f"std={np.std(self._samples[-1][:self._m_t])}\n"
-              f"mt^-0.2={pow(self._m_t, -0.2)}\n"
-        )
+        print(f"std={np.std(self._samples[-1][:self._m_t])}\n")
 
         distances: List[float] = [
             self._distance(x, y) for y in self._samples[-1][:self._m_t]
@@ -219,6 +215,7 @@ class ALoKDE():
             zf:float = self._compute_plugin_capital_c(idx, h_i)
 
             h: float = (self._w_k / (zf * m * self._u_k ** 2)) ** 0.2
+            h = self._hs[idx][0]
 
             mise += (h**4 * self._u_k**2 * zf / 4 + self._w_k / (m * h)) * self._weights[idx]
 
@@ -272,8 +269,9 @@ class ALoKDE():
         new_samples: List[float] = self._samples[m-1]
         new_mean: float = np.mean(new_samples)
 
-        for i, samples in enumerate(self._samples):
+        for i in range(m - 1):
 
+            samples: List[float] = self._samples[i]
             sub_covariance: float = 0
             s_mean: float = np.mean(samples)
 
@@ -291,44 +289,45 @@ class ALoKDE():
 
         return covariance
 
+    def _apply_lambda(self, l: float) -> None:
+        for i in range(len(self._weights)):
+            self._weights[i] *= 1 - l
+        self._weights[-1] = l
 
+    def _find_mise_optimal_lambda(self) -> float:
+        n_repetitions: int = 10
+        initial_weights: List[float] = [w for w in self._weights]
+        submestimators_indices: List[int] = list(range(len(self._samples)))
+        l: float = 0
 
-        # CODE BELOW IS NUMERICAL AND TAKES TOO LONG, SOMETHING IS WRONG
+        lambdas: List[float] = [0, 0.5, 1]
+        lambda_mises: List[float] = []
 
-        domain_range: Tuple[float, float] = self._find_estimator_domain()
-        step_size = (domain_range[1] - domain_range[0]) / self._n_numerical_estimate_points
+        for l in lambdas:
+            self._apply_lambda(l)
+            lambda_mises.append(self._compute_mise(submestimators_indices))
+            self._weights = [w for w in initial_weights]
 
-        domain: List[float] = [domain_range[0]]
+        for _ in range(n_repetitions):
 
-        while domain[-1] < domain_range[1]:
-            domain.append(domain[-1] + step_size)
+            print(f"\tlambdas = {lambdas}\n\tmises = {lambda_mises}")
 
-        y = []
+            idx: int = 0 if lambda_mises[0] > lambda_mises[2] else 2
+            lambda_mises.pop(idx)
+            lambdas.pop(idx)
 
-        m: int = len(self._samples)
+            lambdas.insert(1, sum(lambdas) / 2)
+            self._apply_lambda(lambdas[1])
+            print(f"\tUsed weights: {self._weights}")
+            lambda_mises.insert(1, self._compute_mise(submestimators_indices))
+            self._weights = [w for w in initial_weights]
+            print(f"\tWeights after reset: {self._weights}")
 
-        for x in domain:
+        min_mise = min(lambda_mises)
+        l = lambdas[lambda_mises.index(min_mise)]
 
-            f_t_bias: float = self._get_estimator_bias(list(range(m - 1)), x)
-            f_kde_bias: float = self._get_estimator_bias([m - 1], x)
-
-            f_t_value: float = self._get_estimator_value(list(range(m - 1)), x)
-            f_kde_value: float = self._get_estimator_value([m - 1], x)
-
-            f_t_expected_value: float = self._get_estimators_expected_value(list(range(m - 1)))
-            f_kde_expected_value: float = self._get_estimators_expected_value([m - 1])
-
-            estimators_covariance: float = f_t_value - f_t_expected_value
-            estimators_covariance *= f_kde_value - f_kde_expected_value
-
-            y.append(f_t_bias * f_kde_bias + estimators_covariance)
-
-        covariance: float = 0
-
-        for i in range(len(y) - 1):
-            covariance += (y[i] + y[i + 1]) * step_size
-
-        return covariance
+        self._weights = initial_weights
+        return l
 
     def _update_weights(self):
         """
@@ -358,6 +357,12 @@ class ALoKDE():
         l = np.max([0, np.min([1.0, (b-c) / (a + b - 2 * c)])])
 
         print(f"lambda = {l}")
+
+        l_2: float = self._find_mise_optimal_lambda()
+
+        print(f"mise_optimal lambda = {l_2}")
+
+        l = l_2
 
         for i, w in enumerate(self._weights):
             self._weights[i] = w * (1 - l)
@@ -393,10 +398,17 @@ class ALoKDE():
             self._weights[i] = w / weights_sum
 
     def _remove_old_estimators(self) -> None:
-        while self._weights[0] < self._weight_threshold:
-            self._weights.pop(0)
-            self._samples.pop(0)
-            self._hs.pop(0)
+
+        i: int = 0
+
+        while i < len(self._weights):
+            if self._weights[i] > self._weight_threshold:
+                i += 1
+                continue
+
+            self._weights.pop(i)
+            self._samples.pop(i)
+            self._hs.pop(i)
             self._normalize_weights()
 
     def process_new_element(self, x: float) -> None:

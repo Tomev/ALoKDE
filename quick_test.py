@@ -13,7 +13,16 @@ plt.xlim(-5, 10)
 plt.plot(X, norm_pdf)
 plt.plot(X, alokde_pdf)
 
-stream = np.random.normal(0, size=1000)
+np.random.seed(42)
+stream = np.random.normal(0, size=100)
+
+for s in stream:
+    alg.process_new_element(s)
+
+updated_alokde_pdf =[alg.pdf(x) for x in X]
+plt.plot(X, updated_alokde_pdf)
+
+stream = np.random.normal(5, size=1000)
 
 for s in stream:
     alg.process_new_element(s)
