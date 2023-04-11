@@ -1,2 +1,3 @@
 quick_test_*
 .idea
+*pycache*
