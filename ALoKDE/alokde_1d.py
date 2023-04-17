@@ -16,7 +16,8 @@ class ALoKDE:
     An implementation of the 1D ALoKDE algorithm.
     """
 
-    def __init__(self, e: float = 0.1, tau: float = 1, m_t: int = 100) -> None:
+    def __init__(self, e: float = 0.1, tau: float = 1, m_t: int = 100,
+                 alpha: float = 0.05, h_mod:float = 1) -> None:
         """
         The constructor of our implementation of the ALoKDE algorithm. The initial
         values were proposed by the authors of the algorithm.
@@ -44,17 +45,17 @@ class ALoKDE:
         self._e_t: float = e
         self._tau: float = tau
         self._m_t: int = m_t  # Selection based on our empirical investigations.
+        self._h_mod = h_mod
 
         # KS Test
 
         # 0.975 for alpha = 0.05, as suggested by the authors
-        self._ks_test_critical_value: float = 0.05
-        self._ks_test_critical_level: float = 0.975
+        self._ks_test_critical_value: float = alpha
         self._n_numerical_estimate_points: int = 1001
 
         # Estimator
         self._weights: List[float] = [1]
-        self._hs: List[Tuple[float, float]] = [(1.0, 1.0)]
+        self._hs: List[Tuple[float, float]] = [(1.0/h_mod, 1.0/h_mod)]
 
         # The authors suggest to initialize their algorithm with 0. To make the
         # initial estimator processable in the same manner as all the others, we
@@ -111,9 +112,9 @@ class ALoKDE:
             n = len(samples)
 
             for j in range(len(samples) - 1):
-                cdf += norm.cdf(x, loc=samples[j], scale=self._hs[i][0]) * self._weights[i] / n
+                cdf += norm.cdf(x, loc=samples[j], scale=self._hs[i][0]*self._h_mod) * self._weights[i] / n
 
-            cdf += norm.cdf(x, loc=samples[-1], scale=self._hs[i][-1]) * self._weights[i] / n
+            cdf += norm.cdf(x, loc=samples[-1], scale=self._hs[i][-1]*self._h_mod) * self._weights[i] / n
 
         return cdf
 
@@ -128,7 +129,7 @@ class ALoKDE:
     def _draw_local_sample(self, x: float) -> float:
         subestimator_index: int = np.random.choice(range(len(self._weights)), p=self._weights)
 
-        h: float = self._hs[subestimator_index][0]
+        h: float = self._hs[subestimator_index][0] *self._h_mod
         mu: float = np.random.choice(self._samples[subestimator_index])
 
         low = norm.cdf(x-(self._tau * np.sqrt(1 + self._e_t)), loc=mu, scale=h)
@@ -177,11 +178,6 @@ class ALoKDE:
         c: float = 1.06  # Gaussian kernel constant
 
         h_d: float = c * np.std(self._samples[-1][:self._m_t]) * pow(self._m_t, -0.2)
-
-        print(f"c={c}\n"
-              f"std={np.std(self._samples[-1][:self._m_t])}\n"
-              f"mt^-0.2={pow(self._m_t, -0.2)}\n"
-        )
 
         distances: List[float] = [
             self._distance(x, y) for y in self._samples[-1][:self._m_t]
@@ -309,7 +305,6 @@ class ALoKDE:
 
         return np.mean(xys) - np.mean(x) * np.mean(ys)
 
-
     def _update_weights(self):
         """
         Updates weights of the estimators.
@@ -344,6 +339,9 @@ class ALoKDE:
 
         self._weights[-1] = l
 
+    def get_domain(self) -> Tuple[float, float]:
+        return self._find_estimator_domain()
+
     def _find_estimator_domain(self, e_indices: Optional[List[int]] = None) -> Tuple[float, float]:
         """
         Finds the domain of the estimator.
@@ -355,12 +353,12 @@ class ALoKDE:
         if not e_indices:
             e_indices = list(range(len(self._samples)))
 
-        h = max(self._hs[e_indices[0]])
+        h = max(self._hs[e_indices[0]]) * self._h_mod
         min_val: float = min(self._samples[e_indices[0]]) - 5 * h
         max_val: float = max(self._samples[e_indices[0]]) + 5 * h
 
         for i in e_indices:
-            h = max(self._hs[i])
+            h = max(self._hs[i]) *self._h_mod
             min_val = min(min_val, min(self._samples[i]) - 5 * h)
             max_val = max(max_val, max(self._samples[i]) + 5 * h)
 
@@ -424,9 +422,9 @@ class ALoKDE:
 
         for i in range(len(samples) - 1):
             s = samples[i]
-            val += K((x - s) / hs[0]) / hs[0]
+            val += K((x - s) / (hs[0] * self._h_mod)) / (hs[0] * self._h_mod)
 
-        val += K((x - samples[-1]) / hs[1]) / hs[1]
+        val += K((x - samples[-1]) / (hs[1] * self._h_mod)) / (hs[1] * self._h_mod)
 
         return val / len(samples)
 
