@@ -1,6 +1,6 @@
 *.png
 .idea/*
 quick_test.py
-ALoKDE/__pychache__/
+ALoKDE/__pycache__/
 stream_*
 results_*

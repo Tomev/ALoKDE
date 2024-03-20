@@ -127,7 +127,7 @@ def process_stream(stream_id, stream_num):
             print("Drawing...")
 
             # Plot if it's the first stream of the list.
-            if stream_num == 1:
+            if stream_num < 5:
                 plt.text(-4.5, 0.52, f"i = {i + 1}, "
                                      f"l2_a = {round(l2, 6)}, "
                                      f"avg_l2 = {avg_l2}")
@@ -138,7 +138,7 @@ def process_stream(stream_id, stream_num):
                 plt.plot(X, norm_pdf, color="red")
                 plt.plot(X, updated_alokde_pdf, color="black")
                 #plt.show()
-                plt.savefig(f"{dir}/{i+1}.png")
+                plt.savefig(f"{dir}/{stream_num}_{i+1}.png")
                 plt.clf()
 
     print(f"Done. The experiment took {time.time() - start_time}.")
@@ -146,8 +146,9 @@ def process_stream(stream_id, stream_num):
 
 def main():
     stream_id = 0
+    end_seed = 20
 
-    for stream_number in range(1, 101):
+    for stream_number in range(end_seed - 19, end_seed + 1):
         process_stream(stream_id, stream_number)
 
 
