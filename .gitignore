@@ -1,2 +1,4 @@
 *.png
-.idea
+.idea/
+quick_test.py
+__pychache__
