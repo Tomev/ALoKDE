@@ -113,8 +113,8 @@ def process_stream(stream_id, stream_num):
             print("Computing error...")
 
             updated_alokde_pdf = [alg.pdf(x) for x in X]
-            norm_pdf = [unimodal_pdf(x, theoretical_means[i]) for x in X]
-            #norm_pdf = [bimodal_pdf(x, theoretical_means[i]) for x in X]
+            #norm_pdf = [unimodal_pdf(x, theoretical_means[i]) for x in X]
+            norm_pdf = [bimodal_pdf(x, theoretical_means[i]) for x in X]
             # norm_pdf = [trimodal_pdf(x, theoretical_means[i]) for x in X]
 
             l2: float = compute_l2_error(alg, theoretical_means[i])
@@ -145,7 +145,7 @@ def process_stream(stream_id, stream_num):
 
 
 def main():
-    stream_id = 0
+    stream_id = 13
     end_seed = 20
 
     for stream_number in range(end_seed - 19, end_seed + 1):
