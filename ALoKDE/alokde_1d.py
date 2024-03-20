@@ -7,16 +7,17 @@
 __author__ = "Tomasz Rybotycki"
 
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm, kstest
 from typing import List, Tuple, Callable, Optional
 import math
 
-class ALoKDE():
+class ALoKDE:
     """
     An implementation of the 1D ALoKDE algorithm.
     """
 
-    def __init__(self, e: float = 0.1, tau: float = 1, m_t: int = 100) -> None:
+    def __init__(self, e: float = 0.1, tau: float = 1, m_t: int = 100,
+                 alpha: float = 0.05, h_mod:float = 1) -> None:
         """
         The constructor of our implementation of the ALoKDE algorithm. The initial
         values were proposed by the authors of the algorithm.
@@ -41,23 +42,25 @@ class ALoKDE():
         self.was_updated: bool = True
 
         self._e: float = e
+        self._e_t: float = e
         self._tau: float = tau
         self._m_t: int = m_t  # Selection based on our empirical investigations.
+        self._h_mod = h_mod
 
         # KS Test
 
         # 0.975 for alpha = 0.05, as suggested by the authors
-        self._ks_test_critical_level: float = 0.975
+        self._ks_test_critical_value: float = alpha
         self._n_numerical_estimate_points: int = 1001
 
         # Estimator
         self._weights: List[float] = [1]
-        self._hs: List[Tuple[float, float]] = [(1.0, 1.0)]
+        self._hs: List[Tuple[float, float]] = [(1.0/h_mod, 1.0/h_mod)]
 
         # The authors suggest to initialize their algorithm with 0. To make the
         # initial estimator processable in the same manner as all the others, we
         # assume that there's an additional incoming sample with value 0.01.
-        self._samples: List[List[float]] = [list(np.random.normal(0, size=1001))]
+        self._samples: List[List[float]] = [list(np.random.normal(0, size=m_t+1))]
 
         # Constants
         self._u_k: float = 1  # Gaussian kernel constant
@@ -65,7 +68,6 @@ class ALoKDE():
 
         # Custom
         self._weight_threshold: float = 0.01
-
 
     def pdf(self, x: float) -> float:
         """
@@ -84,7 +86,25 @@ class ALoKDE():
 
         return val
 
+    def _curvature(self, x: float):
+        val: float = 0
+
+        for i in range(len(self._samples)):
+            val += np.abs(self._compute_estimator_value(x, i, self.kernel_second_derivative)) * self._weights[i]
+
+        return val
+
     def cdf(self, x: float) -> float:
+        """
+        CDF of mixture of gaussians is a mixture of gaussian CDFs.
+        https://stats.stackexchange.com/questions/296285/find-cdf-from-an-estimated-pdf-estimated-by-kde
+
+        https://en.wikipedia.org/wiki/Mixture_distribution#Finite_and_countable_mixtures
+        :param x:
+            Value in which to compute CDF.
+        :return:
+            cdf(x)
+        """
         cdf: float = 0
 
         for i in range(len(self._samples)):
@@ -92,9 +112,9 @@ class ALoKDE():
             n = len(samples)
 
             for j in range(len(samples) - 1):
-                cdf += norm.cdf(x, loc=samples[j], scale=self._hs[i][0]) * self._weights[i] / n
+                cdf += norm.cdf(x, loc=samples[j], scale=self._hs[i][0]*self._h_mod) * self._weights[i] / n
 
-            cdf += norm.cdf(x, loc=samples[-1], scale=self._hs[i][-1]) * self._weights[i] / n
+            cdf += norm.cdf(x, loc=samples[-1], scale=self._hs[i][-1]*self._h_mod) * self._weights[i] / n
 
         return cdf
 
@@ -104,19 +124,16 @@ class ALoKDE():
         :return:
         """
 
-        statistics: float = 1 - self.cdf(x)
-        statistics = max(1 - statistics, statistics)
-
-        return statistics > self._ks_test_critical_level
+        return kstest([x], self.cdf).pvalue < self._ks_test_critical_value
 
     def _draw_local_sample(self, x: float) -> float:
         subestimator_index: int = np.random.choice(range(len(self._weights)), p=self._weights)
 
-        h: float = self._hs[subestimator_index][0]
+        h: float = self._hs[subestimator_index][0] *self._h_mod
         mu: float = np.random.choice(self._samples[subestimator_index])
 
-        low = norm.cdf(x-self._tau, loc=mu, scale=h)
-        high = norm.cdf(x+self._tau, loc=mu, scale=h)
+        low = norm.cdf(x-(self._tau * np.sqrt(1 + self._e_t)), loc=mu, scale=h)
+        high = norm.cdf(x+(self._tau * np.sqrt(1 + self._e_t)), loc=mu, scale=h)
 
         u: float = np.random.uniform(low=low, high=high)
 
@@ -162,18 +179,13 @@ class ALoKDE():
 
         h_d: float = c * np.std(self._samples[-1][:self._m_t]) * pow(self._m_t, -0.2)
 
-        print(f"c={c}\n"
-              f"std={np.std(self._samples[-1][:self._m_t])}\n"
-              f"mt^-0.2={pow(self._m_t, -0.2)}\n"
-        )
-
         distances: List[float] = [
             self._distance(x, y) for y in self._samples[-1][:self._m_t]
         ]
 
         h_x: float = c * np.std(distances)
 
-        print((h_d, h_x))
+        print(f"hs = {(h_d, h_x)}")
 
         self._hs.append((h_d, h_x))
 
@@ -265,70 +277,33 @@ class ALoKDE():
         return expected_value
 
     def _compute_estimators_covariance(self) -> float:
+        """
+        Compute numerical approximation of estimators covariance.
+        :return:
+            Numerical approximation of estimators covariance.
+        """
+        domain: Tuple[float, float] = self._find_estimator_domain()
+        step_size: float = (domain[1] - domain[0]) / self._n_numerical_estimate_points
 
-        covariance: float = 0
-        m: int = len(self._samples)
+        x: float = domain[0]
 
-        new_samples: List[float] = self._samples[m-1]
-        new_mean: float = np.mean(new_samples)
+        xs: List[float] = []
+        ys: List[float] = []
+        xys: List[float] = []
 
-        for i, samples in enumerate(self._samples):
+        while x < domain[1]:
+            xs.append(
+                self._get_estimator_value(
+                    [i for i in range(len(self._samples) - 1)], x)
+            )
+            ys.append(
+                self._get_estimator_value(
+                    [len(self._samples) - 1], x)
+            )
+            xys.append(xs[-1] * ys[-1])
+            x += step_size
 
-            sub_covariance: float = 0
-            s_mean: float = np.mean(samples)
-
-            for j in samples:
-
-                for k in new_samples:
-
-                    sub_covariance += (j - s_mean) * (k - new_mean)
-
-            sub_covariance /= len(samples) * len(new_samples)
-
-
-            covariance += sub_covariance * self._weights[i]
-
-
-        return covariance
-
-
-
-        # CODE BELOW IS NUMERICAL AND TAKES TOO LONG, SOMETHING IS WRONG
-
-        domain_range: Tuple[float, float] = self._find_estimator_domain()
-        step_size = (domain_range[1] - domain_range[0]) / self._n_numerical_estimate_points
-
-        domain: List[float] = [domain_range[0]]
-
-        while domain[-1] < domain_range[1]:
-            domain.append(domain[-1] + step_size)
-
-        y = []
-
-        m: int = len(self._samples)
-
-        for x in domain:
-
-            f_t_bias: float = self._get_estimator_bias(list(range(m - 1)), x)
-            f_kde_bias: float = self._get_estimator_bias([m - 1], x)
-
-            f_t_value: float = self._get_estimator_value(list(range(m - 1)), x)
-            f_kde_value: float = self._get_estimator_value([m - 1], x)
-
-            f_t_expected_value: float = self._get_estimators_expected_value(list(range(m - 1)))
-            f_kde_expected_value: float = self._get_estimators_expected_value([m - 1])
-
-            estimators_covariance: float = f_t_value - f_t_expected_value
-            estimators_covariance *= f_kde_value - f_kde_expected_value
-
-            y.append(f_t_bias * f_kde_bias + estimators_covariance)
-
-        covariance: float = 0
-
-        for i in range(len(y) - 1):
-            covariance += (y[i] + y[i + 1]) * step_size
-
-        return covariance
+        return np.mean(xys) - np.mean(x) * np.mean(ys)
 
     def _update_weights(self):
         """
@@ -364,6 +339,9 @@ class ALoKDE():
 
         self._weights[-1] = l
 
+    def get_domain(self) -> Tuple[float, float]:
+        return self._find_estimator_domain()
+
     def _find_estimator_domain(self, e_indices: Optional[List[int]] = None) -> Tuple[float, float]:
         """
         Finds the domain of the estimator.
@@ -375,16 +353,16 @@ class ALoKDE():
         if not e_indices:
             e_indices = list(range(len(self._samples)))
 
-        h = max(self._hs[e_indices[0]])
+        h = max(self._hs[e_indices[0]]) * self._h_mod
         min_val: float = min(self._samples[e_indices[0]]) - 5 * h
         max_val: float = max(self._samples[e_indices[0]]) + 5 * h
 
         for i in e_indices:
-            h = max(self._hs[i])
+            h = max(self._hs[i]) *self._h_mod
             min_val = min(min_val, min(self._samples[i]) - 5 * h)
             max_val = max(max_val, max(self._samples[i]) + 5 * h)
 
-        return (min_val, max_val)
+        return min_val, max_val
 
     def _normalize_weights(self) -> None:
         weights_sum: float = sum(self._weights)
@@ -399,6 +377,9 @@ class ALoKDE():
             self._hs.pop(0)
             self._normalize_weights()
 
+    def _update_e_t(self, x: float) -> None:
+        self._e_t = 1 / (self._curvature(x) + self._e)
+
     def process_new_element(self, x: float) -> None:
         """
         Process the new data stream element.
@@ -412,10 +393,12 @@ class ALoKDE():
         print(f"Updating after receiving: {x}.")
 
         self.was_updated = True
+        self._update_e_t(x)
         self._get_local_samples(x)
         self._compute_bandwidths(x)
         self._update_weights()
         self._remove_old_estimators()
+        print(f"weights: {self._weights}")
 
     def _compute_estimator_value(self, x: float, e_i: int, K: Callable[[float], float] = None) -> float:
         """
@@ -439,9 +422,9 @@ class ALoKDE():
 
         for i in range(len(samples) - 1):
             s = samples[i]
-            val += K((x - s) / hs[0]) / hs[0]
+            val += K((x - s) / (hs[0] * self._h_mod)) / (hs[0] * self._h_mod)
 
-        val += K((x - samples[-1]) / hs[1]) / hs[1]
+        val += K((x - samples[-1]) / (hs[1] * self._h_mod)) / (hs[1] * self._h_mod)
 
         return val / len(samples)
 
@@ -469,5 +452,5 @@ class ALoKDE():
         :return:
             1d Mahalanobis distance, as presented in ALoKDE paper.
         """
-        return np.sqrt((x1 - x2) * (1 + self._e)** -1 * (x1 - x2))
+        return np.sqrt((x1 - x2) * (1 + self._e_t) ** -1 * (x1 - x2))
 

@@ -1,0 +1,6 @@
+*.png
+.idea/*
+quick_test.py
+ALoKDE/__pychache__/
+stream_*
+results_*
