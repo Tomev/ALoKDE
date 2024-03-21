@@ -148,7 +148,7 @@ def main():
     stream_id = 14
     end_seed = 20
 
-    for stream_number in range(end_seed - 19, end_seed + 1):
+    for stream_number in range(end_seed, end_seed - 9, -1):
         process_stream(stream_id, stream_number)
 
 
