@@ -132,7 +132,7 @@ def process_stream(stream_id, stream_num):
             print("Drawing...")
 
             # Plot if it's the first stream of the list.
-            if stream_num < 100:
+            if stream_num < 0:
                 plt.text(-4.5, 0.52, f"i = {i + 1}, "
                                      f"l2_a = {round(l2, 6)}, "
                                      f"avg_l2 = {avg_l2}")
