@@ -36,8 +36,10 @@ def compute_l2_error(alg: ALoKDE, mu: float) -> float:
 def unimodal_pdf(x, mean: float) -> float:
     return norm.pdf(x, loc=mean, scale=1)
 
+
 def bimodal_pdf(x, mean: float) -> float:
     return 0.6 * norm.pdf(x, loc=mean, scale=1) + 0.4 * norm.pdf(x, loc=mean + 5, scale=1)
+
 
 def trimodal_pdf(x, mean: float) -> float:
     return 0.3 * norm.pdf(x, loc=mean -5, scale=1) + 0.3 * norm.pdf(x, loc=mean + 5, scale=1) + 0.4 * norm.pdf(x, loc=mean, scale=1)
@@ -48,15 +50,18 @@ def process_stream(stream_id, stream_num):
     start_time = time.time()
 
     X = [i / 100 for i in range(-500, 4800)]  # Unimodal
+    pdf = unimodal_pdf
     if stream_id == 13:
         X = [i / 100 for i in range(-500, 5300)]  # Bimodal
+        pdf = bimodal_pdf
     if stream_id == 14:
-         X = [i / 100 for i in range(-1000, 5300)]  # Trimodal
+        X = [i / 100 for i in range(-1000, 5300)]  # Trimodal
+        pdf = trimodal_pdf
 
     theoretical_means = [i / 1000 for i in range(2000)]
     theoretical_means.extend([2 + i / 100 for i in range(4000)])
-    theoretical_means.extend([42 for i in range(2000)])
-    theoretical_means.extend([43 for i in range(2000)])
+    theoretical_means.extend([42 for _ in range(2000)])
+    theoretical_means.extend([43 for _ in range(2000)])
 
     h_mod: float = 1        # Default = 1
     alpha: float = 0.05     # Default = 0.05
@@ -67,6 +72,7 @@ def process_stream(stream_id, stream_num):
     alg = ALoKDE(e=e, tau=tau, alpha=alpha, h_mod=h_mod, m_t=m_t)
 
     dir: str = f"y:/TR Badania/ALoKDE/results_{stream_id}"
+    # dir: str = "results"
 
     # Make dir if it doesn't exist.
     if not path.exists(dir):
@@ -94,6 +100,7 @@ def process_stream(stream_id, stream_num):
 
     # stream_file = f"stream_{stream_id}/stream_{stream_id}_{stream_num}.csv"
     stream_file = f"y:/data/stream_{stream_id}/stream_{stream_id}_{stream_num}.csv"
+    #stream_file = f"k:\Coding\Python\Poligon\Articles\IBS_PhD\streams\stream_{stream_id}\stream_{stream_id}_{stream_num}.csv"
 
     with open(stream_file, "r") as f:
         while True:
@@ -113,9 +120,7 @@ def process_stream(stream_id, stream_num):
             print("Computing error...")
 
             updated_alokde_pdf = [alg.pdf(x) for x in X]
-            #norm_pdf = [unimodal_pdf(x, theoretical_means[i]) for x in X]
-            norm_pdf = [bimodal_pdf(x, theoretical_means[i]) for x in X]
-            #norm_pdf = [trimodal_pdf(x, theoretical_means[i]) for x in X]
+            norm_pdf = [pdf(x, theoretical_means[i]) for x in X]
 
             l2: float = compute_l2_error(alg, theoretical_means[i])
             sum_l2 += l2
@@ -127,7 +132,7 @@ def process_stream(stream_id, stream_num):
             print("Drawing...")
 
             # Plot if it's the first stream of the list.
-            if stream_num < 5:
+            if stream_num < 100:
                 plt.text(-4.5, 0.52, f"i = {i + 1}, "
                                      f"l2_a = {round(l2, 6)}, "
                                      f"avg_l2 = {avg_l2}")
@@ -145,10 +150,9 @@ def process_stream(stream_id, stream_num):
 
 
 def main():
-    stream_id = 13
-    end_seed = 20
+    stream_id = 14
 
-    for stream_number in range(end_seed, end_seed - 9, -1):
+    for stream_number in [24]:
         process_stream(stream_id, stream_number)
 
 
