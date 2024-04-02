@@ -72,7 +72,7 @@ def process_stream(stream_id, stream_num):
     alg = ALoKDE(e=e, tau=tau, alpha=alpha, h_mod=h_mod, m_t=m_t)
 
     dir: str = f"y:/TR Badania/ALoKDE/results_{stream_id}"
-    # dir: str = "results"
+    #dir: str = "results"
 
     # Make dir if it doesn't exist.
     if not path.exists(dir):
@@ -100,7 +100,7 @@ def process_stream(stream_id, stream_num):
 
     # stream_file = f"stream_{stream_id}/stream_{stream_id}_{stream_num}.csv"
     stream_file = f"y:/data/stream_{stream_id}/stream_{stream_id}_{stream_num}.csv"
-    #stream_file = f"k:\Coding\Python\Poligon\Articles\IBS_PhD\streams\stream_{stream_id}\stream_{stream_id}_{stream_num}.csv"
+    # stream_file = f"k:\Coding\Python\Poligon\Articles\IBS_PhD\streams\stream_{stream_id}\stream_{stream_id}_{stream_num}.csv"
 
     with open(stream_file, "r") as f:
         while True:
@@ -129,10 +129,10 @@ def process_stream(stream_id, stream_num):
             with open(f"{dir}/{results_file}", "a") as f:
                 f.write(f"{avg_l2}\n")
 
-            print("Drawing...")
-
             # Plot if it's the first stream of the list.
             if stream_num < 0:
+                print("Drawing...")
+
                 plt.text(-4.5, 0.52, f"i = {i + 1}, "
                                      f"l2_a = {round(l2, 6)}, "
                                      f"avg_l2 = {avg_l2}")
@@ -152,7 +152,7 @@ def process_stream(stream_id, stream_num):
 def main():
     stream_id = 14
 
-    for stream_number in [24]:
+    for stream_number in [12]:
         process_stream(stream_id, stream_number)
 
 
