@@ -163,7 +163,7 @@ class ALoKDE:
 
         local_samples.append(x)
 
-        print(local_samples)
+        # print(local_samples)
 
         self._samples.append(local_samples)
 
@@ -175,17 +175,23 @@ class ALoKDE:
         :param x:
             A new sample drawn from the analyzed data stream.
         """
+
+        std = np.std(self._samples[-1][:self._m_t])
+
+        # In case resampling contains only boarder values.
+        if math.isclose(std, 0):
+            self._hs.append((1, 1))
+            return
+
         c: float = 1.06  # Gaussian kernel constant
 
-        h_d: float = c * np.std(self._samples[-1][:self._m_t]) * pow(self._m_t, -0.2)
+        h_d: float = c * std * pow(self._m_t, -0.2)
 
         distances: List[float] = [
             self._distance(x, y) for y in self._samples[-1][:self._m_t]
         ]
 
         h_x: float = c * np.std(distances)
-
-        print(f"hs = {(h_d, h_x)}")
 
         self._hs.append((h_d, h_x))
 
@@ -332,7 +338,7 @@ class ALoKDE:
 
         l = np.max([0, np.min([1.0, (b-c) / (a + b - 2 * c)])])
 
-        print(f"lambda = {l}")
+        # print(f"lambda = {l}")
 
         for i, w in enumerate(self._weights):
             self._weights[i] = w * (1 - l)
@@ -390,7 +396,7 @@ class ALoKDE:
             self.was_updated = False
             return
 
-        print(f"Updating after receiving: {x}.")
+        # print(f"Updating after receiving: {x}.")
 
         self.was_updated = True
         self._update_e_t(x)
@@ -398,7 +404,7 @@ class ALoKDE:
         self._compute_bandwidths(x)
         self._update_weights()
         self._remove_old_estimators()
-        print(f"weights: {self._weights}")
+        # print(f"weights: {self._weights}")
 
     def _compute_estimator_value(self, x: float, e_i: int, K: Callable[[float], float] = None) -> float:
         """
